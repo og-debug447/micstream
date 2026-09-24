@@ -2,17 +2,17 @@
   "name": "Microphone Stream",
   "shortName": "micstream",
   "version": "0.1.0",
-  "author": "Your Name",
+  "author": "og-debug447",
   "description": "Remote microphone streaming plugin for MeshCentral. Select a microphone, configure bitrate, and listen to audio remotely.",
   "hasAdminPanel": false,
-  "homepage": "https://github.com/YOUR_USERNAME/micstream",
-  "changelogUrl": "https://raw.githubusercontent.com/YOUR_USERNAME/micstream/master/changelog.md",
-  "configUrl": "https://raw.githubusercontent.com/YOUR_USERNAME/micstream/master/config.json",
-  "downloadUrl": "https://github.com/YOUR_USERNAME/micstream/archive/master.zip",
+  "homepage": "https://github.com/og-debug447/micstream",
+  "changelogUrl": "https://raw.githubusercontent.com/og-debug447/micstream/master/changelog.md",
+  "configUrl": "https://raw.githubusercontent.com/og-debug447/micstream/master/config.json",
+  "downloadUrl": "https://github.com/og-debug447/micstream/archive/master.zip",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_USERNAME/micstream.git"
+    "url": "https://github.com/og-debug447/micstream.git"
   },
-  "versionHistoryUrl": "https://api.github.com/repos/YOUR_USERNAME/micstream/tags",
+  "versionHistoryUrl": "https://api.github.com/repos/og-debug447/micstream/tags",
   "meshCentralCompat": ">=1.1.35"
 }
