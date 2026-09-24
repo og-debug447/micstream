@@ -1,0 +1,18 @@
+{
+  "name": "Microphone Stream",
+  "shortName": "micstream",
+  "version": "0.1.0",
+  "author": "Your Name",
+  "description": "Remote microphone streaming plugin for MeshCentral. Select a microphone, configure bitrate, and listen to audio remotely.",
+  "hasAdminPanel": false,
+  "homepage": "https://github.com/yourusername/micstream",
+  "changelogUrl": "https://raw.githubusercontent.com/yourusername/micstream/master/changelog.md",
+  "configUrl": "https://raw.githubusercontent.com/yourusername/micstream/master/config.json",
+  "downloadUrl": "https://github.com/yourusername/micstream/archive/master.zip",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/micstream.git"
+  },
+  "versionHistoryUrl": "https://api.github.com/repos/yourusername/micstream/tags",
+  "meshCentralCompat": ">=1.1.35"
+}
