@@ -26,7 +26,8 @@ module.exports.micstream = function (parent) {
         'handleAudioData',
         'handleMicListResponse',
         'handleServerResponse',
-        'handleCommand'
+        'handleCommand',
+        'addQuickToggleButton'
     ];
     
     // Server startup hook
@@ -203,13 +204,37 @@ module.exports.micstream = function (parent) {
     
     // Web UI startup hook
     obj.onWebUIStartupEnd = function() {
-        // Add menu item to device actions
-        var ld = document.querySelectorAll('#p2DeviceActions > p.mL')[0];
-        if (ld) {
-            var as = Q('plugin_micstreamAction');
-            if (as) as.parentNode.removeChild(as);
-            var x = '<span id="plugin_micstreamAction" style="display: block;"><a onclick="pluginHandler.micstream.openMicStream();">Microphone Stream</a></span>';
-            ld.innerHTML += x;
+        // Try multiple selectors for device actions
+        var selectors = [
+            '#p2DeviceActions > p.mL',
+            '#p2DeviceActions',
+            '.device-actions',
+            '#deviceActions'
+        ];
+        
+        var added = false;
+        selectors.forEach(function(selector) {
+            var ld = document.querySelectorAll(selector)[0];
+            if (ld && !added) {
+                var as = Q('plugin_micstreamAction');
+                if (as) as.parentNode.removeChild(as);
+                var x = '<span id="plugin_micstreamAction" style="display: block; margin: 5px 0;"><a onclick="pluginHandler.micstream.openMicStream();" style="cursor: pointer; color: #0066cc;">🎤 Microphone Stream</a></span>';
+                ld.innerHTML += x;
+                added = true;
+                console.log('MicStream: Added to device actions using selector: ' + selector);
+            }
+        });
+        
+        if (!added) {
+            console.log('MicStream: Could not find device actions container, adding to main page');
+            // Fallback: Add to main page content
+            var mainContent = document.querySelector('#p2') || document.querySelector('.main-content');
+            if (mainContent) {
+                var button = document.createElement('div');
+                button.id = 'plugin_micstreamButton';
+                button.innerHTML = '<button onclick="pluginHandler.micstream.openMicStream();" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px;">🎤 Microphone Stream</button>';
+                mainContent.insertBefore(button, mainContent.firstChild);
+            }
         }
         
         // Add handler for server responses
@@ -220,12 +245,21 @@ module.exports.micstream = function (parent) {
                 pluginHandler.micstream.handleServerResponse(msg);
             };
         }
+        
+        // Add quick toggle button
+        pluginHandler.micstream.addQuickToggleButton();
     };
     
     // Device refresh hook
     obj.onDeviceRefreshEnd = function() {
         // Update UI when device is selected
         pluginHandler.micstream.updateMicList();
+        
+        // Ensure button is visible when device is selected
+        var button = Q('plugin_micstreamButton');
+        if (button && currentNode) {
+            button.style.display = 'block';
+        }
     };
     
     // Open microphone stream interface
@@ -254,8 +288,8 @@ module.exports.micstream = function (parent) {
                     </select>
                     
                     <div style="margin-top: 20px;">
-                        <button id="startStreamBtn" onclick="pluginHandler.micstream.startStreaming();" style="padding: 10px 20px; margin-right: 10px;">Start Streaming</button>
-                        <button id="stopStreamBtn" onclick="pluginHandler.micstream.stopStreaming();" style="padding: 10px 20px; display: none;">Stop Streaming</button>
+                        <button id="startStreamBtn" onclick="pluginHandler.micstream.startStreaming();" style="padding: 10px 20px; margin-right: 10px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">🎤 Start Streaming</button>
+                        <button id="stopStreamBtn" onclick="pluginHandler.micstream.stopStreaming();" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; display: none;">⏹️ Stop Streaming</button>
                     </div>
                     
                     <div id="streamStatus" style="margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 5px; display: none;">
@@ -276,6 +310,22 @@ module.exports.micstream = function (parent) {
         
         // Request microphone list from server
         pluginHandler.micstream.updateMicList();
+    };
+    
+    // Add a quick toggle button to the main interface
+    obj.addQuickToggleButton = function() {
+        // Add to the main page toolbar if it exists
+        var toolbar = document.querySelector('.toolbar') || document.querySelector('.main-toolbar') || document.querySelector('#toolbar');
+        if (toolbar) {
+            var toggleBtn = document.createElement('button');
+            toggleBtn.id = 'micStreamToggle';
+            toggleBtn.innerHTML = '🎤 Mic';
+            toggleBtn.style.cssText = 'padding: 5px 10px; margin-left: 10px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;';
+            toggleBtn.onclick = function() {
+                pluginHandler.micstream.openMicStream();
+            };
+            toolbar.appendChild(toggleBtn);
+        }
     };
     
     // Update microphone list from server
