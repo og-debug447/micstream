@@ -252,14 +252,19 @@ module.exports.micstream = function (parent) {
     
     // Web UI startup hook
     obj.onWebUIStartupEnd = function() {
+        console.log('MicStream: Web UI startup hook called');
+
         // Try multiple selectors for device actions
         var selectors = [
             '#p2DeviceActions > p.mL',
             '#p2DeviceActions',
             '.device-actions',
-            '#deviceActions'
+            '#deviceActions',
+            '#p2 > div:nth-child(2) > div',  // Try main content area
+            '.p10html3',  // Try common MeshCentral content class
+            '#p2 .p10html3'
         ];
-        
+
         var added = false;
         selectors.forEach(function(selector) {
             var ld = document.querySelectorAll(selector)[0];
@@ -272,7 +277,7 @@ module.exports.micstream = function (parent) {
                 console.log('MicStream: Added to device actions using selector: ' + selector);
             }
         });
-        
+
         if (!added) {
             console.log('MicStream: Could not find device actions container, adding to main page');
             // Fallback: Add to main page content
@@ -282,9 +287,10 @@ module.exports.micstream = function (parent) {
                 button.id = 'plugin_micstreamButton';
                 button.innerHTML = '<button onclick="pluginHandler.micstream.openMicStream();" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px;">🎤 Microphone Stream</button>';
                 mainContent.insertBefore(button, mainContent.firstChild);
+                console.log('MicStream: Added fallback button to main page');
             }
         }
-        
+
         // Add handler for server responses
         if (typeof onServerMessage !== 'undefined') {
             var originalHandler = onServerMessage;
@@ -293,7 +299,7 @@ module.exports.micstream = function (parent) {
                 pluginHandler.micstream.handleServerResponse(msg);
             };
         }
-        
+
         // Add quick toggle button
         pluginHandler.micstream.addQuickToggleButton();
     };
@@ -381,17 +387,52 @@ module.exports.micstream = function (parent) {
     
     // Add a quick toggle button to the main interface
     obj.addQuickToggleButton = function() {
-        // Add to the main page toolbar if it exists
-        var toolbar = document.querySelector('.toolbar') || document.querySelector('.main-toolbar') || document.querySelector('#toolbar');
-        if (toolbar) {
-            var toggleBtn = document.createElement('button');
-            toggleBtn.id = 'micStreamToggle';
-            toggleBtn.innerHTML = '🎤 Mic';
-            toggleBtn.style.cssText = 'padding: 5px 10px; margin-left: 10px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;';
-            toggleBtn.onclick = function() {
-                pluginHandler.micstream.openMicStream();
-            };
-            toolbar.appendChild(toggleBtn);
+        console.log('MicStream: Adding quick toggle button');
+
+        // Try multiple toolbar locations
+        var toolbarSelectors = [
+            '.toolbar',
+            '.main-toolbar',
+            '#toolbar',
+            '.top-toolbar',
+            '#top-toolbar',
+            '.header-toolbar',
+            '#header-toolbar',
+            '#headerActions',
+            '.header-actions'
+        ];
+
+        var added = false;
+        toolbarSelectors.forEach(function(selector) {
+            if (!added) {
+                var toolbar = document.querySelector(selector);
+                if (toolbar) {
+                    // Check if button already exists
+                    var existingBtn = Q('micStreamToggle');
+                    if (existingBtn) existingBtn.parentNode.removeChild(existingBtn);
+
+                    var toggleBtn = document.createElement('button');
+                    toggleBtn.id = 'micStreamToggle';
+                    toggleBtn.innerHTML = '🎤 Mic Stream';
+                    toggleBtn.style.cssText = 'padding: 8px 12px; margin-left: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;';
+                    toggleBtn.onclick = function() {
+                        pluginHandler.micstream.openMicStream();
+                    };
+                    toolbar.appendChild(toggleBtn);
+                    added = true;
+                    console.log('MicStream: Added toggle button to toolbar: ' + selector);
+                }
+            }
+        });
+
+        if (!added) {
+            console.log('MicStream: Could not find toolbar, adding to body');
+            // Ultimate fallback: Add to body as a floating button
+            var floatingBtn = document.createElement('div');
+            floatingBtn.id = 'micStreamFloating';
+            floatingBtn.innerHTML = '<button onclick="pluginHandler.micstream.openMicStream();" style="position: fixed; top: 10px; right: 10px; padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; z-index: 9999; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">🎤 Mic Stream</button>';
+            document.body.appendChild(floatingBtn);
+            console.log('MicStream: Added floating button');
         }
     };
     
