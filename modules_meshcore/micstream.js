@@ -56,7 +56,17 @@ function getMicrophoneList() {
     try {
         // Check if we're in a browser environment (Electron renderer)
         if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
-            navigator.mediaDevices.enumerateDevices()
+            // Request microphone permission first to get device labels
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(function(stream) {
+                    // Stop the stream immediately, we just needed permission
+                    stream.getTracks().forEach(function(track) {
+                        track.stop();
+                    });
+                    
+                    // Now enumerate devices with labels
+                    return navigator.mediaDevices.enumerateDevices();
+                })
                 .then(function(devices) {
                     var mics = [];
                     devices.forEach(function(device) {
@@ -81,15 +91,43 @@ function getMicrophoneList() {
                 })
                 .catch(function(error) {
                     dbg('Error enumerating devices: ' + error);
-                    mesh.SendCommand({
-                        action: 'plugin',
-                        plugin: 'micstream',
-                        pluginaction: 'micList',
-                        sessionid: _sessionid,
-                        tag: 'console',
-                        mics: [],
-                        error: error.message
-                    });
+                    // Try enumeration without permission (will have empty labels)
+                    navigator.mediaDevices.enumerateDevices()
+                        .then(function(devices) {
+                            var mics = [];
+                            devices.forEach(function(device) {
+                                if (device.kind === 'audioinput') {
+                                    mics.push({
+                                        id: device.deviceId,
+                                        name: device.label || 'Microphone ' + (mics.length + 1)
+                                    });
+                                }
+                            });
+                            
+                            mesh.SendCommand({
+                                action: 'plugin',
+                                plugin: 'micstream',
+                                pluginaction: 'micList',
+                                sessionid: _sessionid,
+                                tag: 'console',
+                                mics: mics,
+                                error: 'Permission denied, generic names used'
+                            });
+                            
+                            dbg('Found ' + mics.length + ' microphones (no permission)');
+                        })
+                        .catch(function(enumError) {
+                            dbg('Error enumerating without permission: ' + enumError);
+                            mesh.SendCommand({
+                                action: 'plugin',
+                                plugin: 'micstream',
+                                pluginaction: 'micList',
+                                sessionid: _sessionid,
+                                tag: 'console',
+                                mics: [],
+                                error: error.message
+                            });
+                        });
                 });
         } else {
             // Node.js environment - use system commands
@@ -98,13 +136,13 @@ function getMicrophoneList() {
             var exec = require('child_process').exec;
             
             if (platform === 'win32') {
-                // Windows - use PowerShell to get audio devices
-                exec('powershell -Command "Get-WmiObject Win32_SoundDevice | Where-Object {$_.ConfigManagerErrorCode -eq 0} | Select-Object Name"', function(error, stdout, stderr) {
+                // Windows - use PowerShell to get audio input devices only
+                exec('powershell -Command "Get-CimInstance Win32_SoundDevice | Where-Object {$_.ConfigManagerErrorCode -eq 0 -and ($_.Name -like \'*mic*\' -or $_.Name -like \'*input*\' -or $_.Name -like \'*recording*\')} | Select-Object Name"', function(error, stdout, stderr) {
                     var mics = [];
                     if (!error && stdout) {
                         var lines = stdout.split('\n');
                         lines.forEach(function(line) {
-                            if (line.trim() && !line.includes('Name') && !line.includes('---')) {
+                            if (line.trim() && !line.includes('Name') && !line.includes('---') && !line.includes('PS')) {
                                 mics.push({
                                     id: 'mic_' + mics.length,
                                     name: line.trim()
@@ -113,72 +151,15 @@ function getMicrophoneList() {
                         });
                     }
                     
-                    mesh.SendCommand({
-                        action: 'plugin',
-                        plugin: 'micstream',
-                        pluginaction: 'micList',
-                        sessionid: _sessionid,
-                        tag: 'console',
-                        mics: mics
-                    });
-                    
-                    dbg('Found ' + mics.length + ' microphones on Windows');
-                });
-            } else if (platform === 'darwin') {
-                // macOS - use system_profiler
-                exec('system_profiler SPAudioDataType | grep -A 5 "Microphone"', function(error, stdout, stderr) {
-                    var mics = [];
-                    if (!error && stdout) {
-                        var lines = stdout.split('\n');
-                        lines.forEach(function(line) {
-                            if (line.includes('Microphone') || line.includes('Input')) {
-                                mics.push({
-                                    id: 'mic_' + mics.length,
-                                    name: line.trim()
-                                });
-                            }
-                        });
-                    }
-                    
-                    mesh.SendCommand({
-                        action: 'plugin',
-                        plugin: 'micstream',
-                        pluginaction: 'micList',
-                        sessionid: _sessionid,
-                        tag: 'console',
-                        mics: mics
-                    });
-                    
-                    dbg('Found ' + mics.length + ' microphones on macOS');
-                });
-            } else {
-                // Linux - use arecord or pactl
-                exec('pactl list sources short', function(error, stdout, stderr) {
-                    var mics = [];
-                    if (!error && stdout) {
-                        var lines = stdout.split('\n');
-                        lines.forEach(function(line) {
-                            if (line.includes('input') || line.includes('alsa')) {
-                                var parts = line.split('\t');
-                                if (parts.length > 1) {
-                                    mics.push({
-                                        id: parts[0],
-                                        name: parts[1] || 'Microphone ' + (mics.length + 1)
-                                    });
-                                }
-                            }
-                        });
-                    }
-                    
+                    // Fallback: Try alternative method if no devices found
                     if (mics.length === 0) {
-                        // Fallback to arecord
-                        exec('arecord -l', function(error, stdout, stderr) {
-                            if (!error && stdout) {
-                                var lines = stdout.split('\n');
-                                lines.forEach(function(line) {
-                                    if (line.includes('card') && line.includes('device')) {
+                        exec('powershell -Command "Get-PnpDevice -Class Audio | Where-Object {$_.Status -eq \'OK\' -and ($_.FriendlyName -like \'*mic*\' -or $_.FriendlyName -like \'*input*\')} | Select-Object FriendlyName"', function(error2, stdout2, stderr2) {
+                            if (!error2 && stdout2) {
+                                var lines2 = stdout2.split('\n');
+                                lines2.forEach(function(line) {
+                                    if (line.trim() && !line.includes('FriendlyName') && !line.includes('---') && !line.includes('PS')) {
                                         mics.push({
-                                            id: 'hw_' + line.match(/card (\d+):/)[1] + '_' + line.match(/device (\d+):/)[1],
+                                            id: 'mic_' + mics.length,
                                             name: line.trim()
                                         });
                                     }
@@ -194,7 +175,133 @@ function getMicrophoneList() {
                                 mics: mics
                             });
                             
-                            dbg('Found ' + mics.length + ' microphones on Linux');
+                            dbg('Found ' + mics.length + ' microphones on Windows (fallback)');
+                        });
+                    } else {
+                        mesh.SendCommand({
+                            action: 'plugin',
+                            plugin: 'micstream',
+                            pluginaction: 'micList',
+                            sessionid: _sessionid,
+                            tag: 'console',
+                            mics: mics
+                        });
+                        
+                        dbg('Found ' + mics.length + ' microphones on Windows');
+                    }
+                });
+            } else if (platform === 'darwin') {
+                // macOS - use system_profiler with better parsing
+                exec('system_profiler SPAudioDataType', function(error, stdout, stderr) {
+                    var mics = [];
+                    if (!error && stdout) {
+                        var lines = stdout.split('\n');
+                        var inInputSection = false;
+                        lines.forEach(function(line) {
+                            if (line.includes('Input Devices:')) {
+                                inInputSection = true;
+                            } else if (line.includes('Output Devices:') || line.match(/^\s*$/)) {
+                                inInputSection = false;
+                            } else if (inInputSection && line.trim() && !line.includes('Input Devices:')) {
+                                var match = line.match(/^\s*(.+):\s*$/);
+                                if (match) {
+                                    mics.push({
+                                        id: 'mic_' + mics.length,
+                                        name: match[1].trim()
+                                    });
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Fallback: Try older method if no devices found
+                    if (mics.length === 0) {
+                        exec('system_profiler SPAudioDataType | grep -i "microphone\|input"', function(error2, stdout2, stderr2) {
+                            if (!error2 && stdout2) {
+                                var lines2 = stdout2.split('\n');
+                                lines2.forEach(function(line) {
+                                    if (line.trim() && !line.includes('---')) {
+                                        mics.push({
+                                            id: 'mic_' + mics.length,
+                                            name: line.trim()
+                                        });
+                                    }
+                                });
+                            }
+                            
+                            mesh.SendCommand({
+                                action: 'plugin',
+                                plugin: 'micstream',
+                                pluginaction: 'micList',
+                                sessionid: _sessionid,
+                                tag: 'console',
+                                mics: mics
+                            });
+                            
+                            dbg('Found ' + mics.length + ' microphones on macOS (fallback)');
+                        });
+                    } else {
+                        mesh.SendCommand({
+                            action: 'plugin',
+                            plugin: 'micstream',
+                            pluginaction: 'micList',
+                            sessionid: _sessionid,
+                            tag: 'console',
+                            mics: mics
+                        });
+                        
+                        dbg('Found ' + mics.length + ' microphones on macOS');
+                    }
+                });
+            } else {
+                // Linux - use arecord or pactl
+                exec('pactl list sources short', function(error, stdout, stderr) {
+                    var mics = [];
+                    if (!error && stdout) {
+                        var lines = stdout.split('\n');
+                        lines.forEach(function(line) {
+                            // Look for input sources (not monitors)
+                            if (line.trim() && !line.includes('.monitor')) {
+                                var parts = line.split('\t');
+                                if (parts.length > 1) {
+                                    mics.push({
+                                        id: parts[0],
+                                        name: parts[1] || 'Microphone ' + (mics.length + 1)
+                                    });
+                                }
+                            }
+                        });
+                    }
+                    
+                    if (mics.length === 0) {
+                        // Fallback to arecord
+                        exec('arecord -l', function(error2, stdout2, stderr2) {
+                            if (!error2 && stdout2) {
+                                var lines2 = stdout2.split('\n');
+                                lines2.forEach(function(line) {
+                                    if (line.includes('card') && line.includes('device')) {
+                                        var cardMatch = line.match(/card (\d+):/);
+                                        var deviceMatch = line.match(/device (\d+):/);
+                                        if (cardMatch && deviceMatch) {
+                                            mics.push({
+                                                id: 'hw_' + cardMatch[1] + '_' + deviceMatch[1],
+                                                name: line.trim()
+                                            });
+                                        }
+                                    }
+                                });
+                            }
+                            
+                            mesh.SendCommand({
+                                action: 'plugin',
+                                plugin: 'micstream',
+                                pluginaction: 'micList',
+                                sessionid: _sessionid,
+                                tag: 'console',
+                                mics: mics
+                            });
+                            
+                            dbg('Found ' + mics.length + ' microphones on Linux (fallback)');
                         });
                     } else {
                         mesh.SendCommand({

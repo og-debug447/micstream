@@ -57,12 +57,15 @@ module.exports.micstream = function (parent) {
             
             switch (req.pluginaction) {
                 case 'micList':
-                    // Store microphone list for this node
+                    // Store microphone list for this node using both IDs for compatibility
                     if (!obj.meshServer.micstream_micLists) {
                         obj.meshServer.micstream_micLists = {};
                     }
+                    // Store with both dbNodeKey and nodeid for compatibility
+                    var nodeId = myparent.nodeid || myparent.dbNodeKey;
+                    obj.meshServer.micstream_micLists[nodeId] = req.mics;
                     obj.meshServer.micstream_micLists[myparent.dbNodeKey] = req.mics;
-                    obj.debug('PLUGIN', 'MicStream', 'Received mic list for node: ' + myparent.dbNodeKey);
+                    obj.debug('PLUGIN', 'MicStream', 'Received mic list for node: ' + nodeId + ' (dbNodeKey: ' + myparent.dbNodeKey + ')');
                     break;
                     
                 case 'audioData':
@@ -128,21 +131,48 @@ module.exports.micstream = function (parent) {
         switch (req.pluginaction) {
             case 'getMicList':
                 var nodeId = req.nodeid;
-                if (obj.meshServer.micstream_micLists && obj.meshServer.micstream_micLists[nodeId]) {
-                    return { success: true, mics: obj.meshServer.micstream_micLists[nodeId] };
+                // Try to find mic list with nodeId first, then try dbNodeKey
+                var mics = null;
+                if (obj.meshServer.micstream_micLists) {
+                    mics = obj.meshServer.micstream_micLists[nodeId];
+                    // If not found, try to find by iterating all keys
+                    if (!mics) {
+                        Object.keys(obj.meshServer.micstream_micLists).forEach(function(key) {
+                            if (key === nodeId || key.includes(nodeId)) {
+                                mics = obj.meshServer.micstream_micLists[key];
+                            }
+                        });
+                    }
+                }
+                if (mics) {
+                    return { success: true, mics: mics };
                 } else {
                     return { success: true, mics: [] };
                 }
-                
+
             case 'startStream':
                 var nodeId = req.nodeid;
                 var micId = req.micId;
                 var bitrate = parseInt(req.bitrate);
-                
-                // Send command to agent
-                if (obj.meshServer.webserver.wsagents && obj.meshServer.webserver.wsagents[nodeId]) {
+
+                // Send command to agent - try multiple lookup methods
+                var agent = null;
+                if (obj.meshServer.webserver.wsagents) {
+                    agent = obj.meshServer.webserver.wsagents[nodeId];
+                    // If not found by nodeId, try to find by dbNodeKey
+                    if (!agent) {
+                        Object.keys(obj.meshServer.webserver.wsagents).forEach(function(key) {
+                            var wsAgent = obj.meshServer.webserver.wsagents[key];
+                            if (wsAgent.dbNodeKey === nodeId || wsAgent.nodeid === nodeId) {
+                                agent = wsAgent;
+                            }
+                        });
+                    }
+                }
+
+                if (agent) {
                     try {
-                        obj.meshServer.webserver.wsagents[nodeId].send(JSON.stringify({
+                        agent.send(JSON.stringify({
                             action: 'plugin',
                             plugin: 'micstream',
                             pluginaction: 'startStream',
@@ -156,13 +186,28 @@ module.exports.micstream = function (parent) {
                 } else {
                     return { success: false, error: 'Agent not connected' };
                 }
-                
+
             case 'stopStream':
                 var nodeId = req.nodeid;
-                
-                if (obj.meshServer.webserver.wsagents && obj.meshServer.webserver.wsagents[nodeId]) {
+
+                // Send command to agent - try multiple lookup methods
+                var agent = null;
+                if (obj.meshServer.webserver.wsagents) {
+                    agent = obj.meshServer.webserver.wsagents[nodeId];
+                    // If not found by nodeId, try to find by dbNodeKey
+                    if (!agent) {
+                        Object.keys(obj.meshServer.webserver.wsagents).forEach(function(key) {
+                            var wsAgent = obj.meshServer.webserver.wsagents[key];
+                            if (wsAgent.dbNodeKey === nodeId || wsAgent.nodeid === nodeId) {
+                                agent = wsAgent;
+                            }
+                        });
+                    }
+                }
+
+                if (agent) {
                     try {
-                        obj.meshServer.webserver.wsagents[nodeId].send(JSON.stringify({
+                        agent.send(JSON.stringify({
                             action: 'plugin',
                             plugin: 'micstream',
                             pluginaction: 'stopStream'
@@ -174,7 +219,7 @@ module.exports.micstream = function (parent) {
                 } else {
                     return { success: false, error: 'Agent not connected' };
                 }
-                
+
             default:
                 return { success: false, error: 'Unknown command' };
         }
@@ -187,7 +232,10 @@ module.exports.micstream = function (parent) {
             Object.keys(obj.meshServer.webserver.wssessions).forEach(function(sessionId) {
                 try {
                     var session = obj.meshServer.webserver.wssessions[sessionId];
-                    if (session.micstream_currentNode === nodeId && session.micstream_listening) {
+                    // Check if this session is listening to this node
+                    var isListening = session.micstream_listening && session.micstream_currentNode === nodeId;
+
+                    if (isListening) {
                         session.send(JSON.stringify({
                             action: 'plugin',
                             plugin: 'micstream',
@@ -268,7 +316,26 @@ module.exports.micstream = function (parent) {
             alert('No device selected');
             return;
         }
-        
+
+        // Check if in viewmode and store the target node ID
+        var isViewMode = (typeof viewmode !== 'undefined' && viewmode);
+        var targetNodeId = currentNode._id;
+
+        if (isViewMode) {
+            // In viewmode, ensure we're using the viewed device, not the viewer's account
+            // Try to get the viewed node ID from MeshCentral's viewmode context
+            if (typeof viewedNodeId !== 'undefined' && viewedNodeId) {
+                targetNodeId = viewedNodeId;
+                console.log('MicStream: Viewmode detected, using viewedNodeId: ' + targetNodeId);
+            } else {
+                console.log('MicStream: Viewmode detected but no viewedNodeId, using currentNode._id: ' + targetNodeId);
+            }
+        }
+
+        // Store the target node ID for use in other functions
+        obj.micstream_targetNodeId = targetNodeId;
+        obj.micstream_isViewMode = isViewMode;
+
         let spage = `<div id="micStreamPanel" style="height:100%;">
             <div><div class="backButton" tabindex=0 onclick="go(2);" title="Back" onkeypress="if (event.key == 'Enter') go(2);"><div class="backButtonEx"></div></div></div>
             <h1>Device Actions - <span>Microphone Stream</span></h1>
@@ -278,7 +345,7 @@ module.exports.micstream = function (parent) {
                     <select id="micSelect" style="width: 100%; max-width: 400px; padding: 8px; margin-bottom: 15px;">
                         <option value="">Loading microphones...</option>
                     </select>
-                    
+
                     <h3>Bitrate Configuration</h3>
                     <select id="bitrateSelect" style="width: 100%; max-width: 400px; padding: 8px; margin-bottom: 15px;">
                         <option value="64000">64 kbps (Low quality)</option>
@@ -286,16 +353,16 @@ module.exports.micstream = function (parent) {
                         <option value="256000">256 kbps (High quality)</option>
                         <option value="320000">320 kbps (Very high quality)</option>
                     </select>
-                    
+
                     <div style="margin-top: 20px;">
                         <button id="startStreamBtn" onclick="pluginHandler.micstream.startStreaming();" style="padding: 10px 20px; margin-right: 10px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">🎤 Start Streaming</button>
                         <button id="stopStreamBtn" onclick="pluginHandler.micstream.stopStreaming();" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; display: none;">⏹️ Stop Streaming</button>
                     </div>
-                    
+
                     <div id="streamStatus" style="margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 5px; display: none;">
                         <strong>Status:</strong> <span id="statusText">Not streaming</span>
                     </div>
-                    
+
                     <div id="audioPlayer" style="margin-top: 20px; display: none;">
                         <h3>Audio Output</h3>
                         <audio id="audioElement" controls autoplay style="width: 100%; max-width: 400px;"></audio>
@@ -303,11 +370,11 @@ module.exports.micstream = function (parent) {
                 </div>
             </div>
         </div>`;
-        
+
         QV('p2', 0);
         xxcurrentView = null;
         document.getElementById('column_l').insertAdjacentHTML('beforeend', spage);
-        
+
         // Request microphone list from server
         pluginHandler.micstream.updateMicList();
     };
@@ -331,16 +398,22 @@ module.exports.micstream = function (parent) {
     // Update microphone list from server
     obj.updateMicList = function() {
         if (currentNode == null) return;
-        
+
+        // Use the stored target node ID (handles viewmode correctly)
+        var targetNodeId = obj.micstream_targetNodeId || currentNode._id;
+        console.log('MicStream: Requesting mic list for node: ' + targetNodeId);
+
         // Request microphone list via meshserver
         meshserver.send({
             action: 'plugin',
             plugin: 'micstream',
             pluginaction: 'getMicList',
-            nodeid: currentNode._id
+            nodeid: targetNodeId
         }, function(response) {
             if (response && response.success) {
                 pluginHandler.micstream.handleMicListResponse(response.mics);
+            } else {
+                console.log('MicStream: Failed to get mic list: ' + (response ? response.error : 'Unknown error'));
             }
         });
     };
@@ -392,30 +465,51 @@ module.exports.micstream = function (parent) {
             alert('No device selected');
             return;
         }
-        
+
         var micId = Q('micSelect').value;
         var bitrate = parseInt(Q('bitrateSelect').value);
-        
+
         if (!micId) {
             alert('Please select a microphone');
             return;
         }
-        
+
+        // Use the stored target node ID (handles viewmode correctly)
+        var targetNodeId = obj.micstream_targetNodeId || currentNode._id;
+        console.log('MicStream: Starting stream for node: ' + targetNodeId);
+
         // Set current node for audio routing
         if (obj.meshServer.webserver && obj.meshServer.webserver.wssessions) {
-            var sessionId = Object.keys(obj.meshServer.webserver.wssessions)[0];
-            if (sessionId) {
-                obj.meshServer.webserver.wssessions[sessionId].micstream_currentNode = currentNode._id;
-                obj.meshServer.webserver.wssessions[sessionId].micstream_listening = true;
+            // Try to get the current user's session ID from MeshCentral
+            var currentSessionId = null;
+            if (typeof parent !== 'undefined' && parent.userid) {
+                // Look for session matching the current user
+                Object.keys(obj.meshServer.webserver.wssessions).forEach(function(sessionId) {
+                    var session = obj.meshServer.webserver.wssessions[sessionId];
+                    if (session.userid === parent.userid) {
+                        currentSessionId = sessionId;
+                    }
+                });
+            }
+
+            // Fallback to first session if we can't find the current user's
+            if (!currentSessionId) {
+                currentSessionId = Object.keys(obj.meshServer.webserver.wssessions)[0];
+            }
+
+            if (currentSessionId) {
+                obj.meshServer.webserver.wssessions[currentSessionId].micstream_currentNode = targetNodeId;
+                obj.meshServer.webserver.wssessions[currentSessionId].micstream_listening = true;
+                console.log('MicStream: Set session ' + currentSessionId + ' to listen to node ' + targetNodeId);
             }
         }
-        
+
         // Send command via meshserver
         meshserver.send({
             action: 'plugin',
             plugin: 'micstream',
             pluginaction: 'startStream',
-            nodeid: currentNode._id,
+            nodeid: targetNodeId,
             micId: micId,
             bitrate: bitrate
         }, function(response) {
@@ -435,27 +529,31 @@ module.exports.micstream = function (parent) {
     // Stop streaming
     obj.stopStreaming = function() {
         if (currentNode == null) return;
-        
+
+        // Use the stored target node ID (handles viewmode correctly)
+        var targetNodeId = obj.micstream_targetNodeId || currentNode._id;
+        console.log('MicStream: Stopping stream for node: ' + targetNodeId);
+
         // Clear listening state
         if (obj.meshServer.webserver && obj.meshServer.webserver.wssessions) {
             Object.keys(obj.meshServer.webserver.wssessions).forEach(function(sessionId) {
                 obj.meshServer.webserver.wssessions[sessionId].micstream_listening = false;
             });
         }
-        
+
         // Send command via meshserver
         meshserver.send({
             action: 'plugin',
             plugin: 'micstream',
             pluginaction: 'stopStream',
-            nodeid: currentNode._id
+            nodeid: targetNodeId
         }, function(response) {
             // Update UI regardless of response
             Q('startStreamBtn').style.display = 'inline-block';
             Q('stopStreamBtn').style.display = 'none';
             Q('statusText').textContent = 'Not streaming';
             Q('audioPlayer').style.display = 'none';
-            
+
             // Stop audio playback
             var audio = Q('audioElement');
             if (audio) {
