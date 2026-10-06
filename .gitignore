@@ -20,3 +20,6 @@ Thumbs.db
 *.temp
 micstream.txt
 routeplus.txt
+
+# Backup files
+backup/
