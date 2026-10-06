@@ -1,15 +1,18 @@
-# Microphone Stream Plugin for MeshCentral
+# Audio Stream Plugin for MeshCentral
 
-A MeshCentral plugin that enables remote microphone streaming. Select a microphone, configure bitrate, and listen to audio from remote devices in real-time.
+A MeshCentral plugin that enables remote audio streaming. Stream microphone or system audio (loopback) from remote devices. Select audio source, configure bitrate, and listen to audio in real-time.
 
 ## Features
 
+- **Audio Source Selection**: Choose between microphone or system audio (loopback) capture
 - **Microphone Selection**: Enumerate and select from available microphones on remote devices
+- **System Audio Capture**: Capture PC audio via loopback (Windows only with native implementation)
 - **Bitrate Configuration**: Choose audio quality from 64kbps to 320kbps
 - **Real-time Streaming**: Listen to live audio from remote devices
+- **Native C Implementation**: Windows uses native WASAPI (no FFmpeg dependency required)
 - **Cross-platform Support**: Works on Windows, macOS, and Linux
 - **Web UI Integration**: Easy-to-use interface integrated into MeshCentral
-- **Permission-based Access**: Requires appropriate permissions to access microphone streaming
+- **Permission-based Access**: Requires appropriate permissions to access audio streaming
 
 ## Installation
 
@@ -44,12 +47,13 @@ Alternatively, you can manually install the plugin by:
 ### For Users
 
 1. **Select a Device**: Navigate to the device you want to monitor in MeshCentral
-2. **Open Microphone Stream**: Click on "Device Actions" > "Microphone Stream"
-3. **Select Microphone**: Choose from the available microphones on the remote device
-4. **Configure Bitrate**: Select your desired audio quality (64-320 kbps)
-5. **Start Streaming**: Click "Start Streaming" to begin listening
-6. **Listen**: Audio will play through your browser's audio player
-7. **Stop Streaming**: Click "Stop Streaming" when done
+2. **Open Audio Stream**: Click on "Device Actions" > "Audio Stream"
+3. **Select Audio Source**: Choose between "Microphone" or "System Audio (Loopback)"
+4. **Select Microphone** (if microphone selected): Choose from the available microphones on the remote device
+5. **Configure Bitrate**: Select your desired audio quality (64-320 kbps)
+6. **Start Streaming**: Click "Start Streaming" to begin listening
+7. **Listen**: Audio will play through your browser's audio player
+8. **Stop Streaming**: Click "Stop Streaming" when done
 
 ### For Administrators
 

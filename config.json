@@ -1,9 +1,9 @@
 {
-  "name": "Microphone Stream",
+  "name": "Audio Stream",
   "shortName": "micstream",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "og-debug447",
-  "description": "Remote microphone streaming plugin for MeshCentral. Select a microphone, configure bitrate, and listen to audio remotely.",
+  "description": "Remote audio streaming plugin for MeshCentral. Stream microphone or system audio (loopback) from remote devices. Select audio source, configure bitrate, and listen to audio remotely.",
   "hasAdminPanel": false,
   "homepage": "https://github.com/og-debug447/micstream",
   "changelogUrl": "https://raw.githubusercontent.com/og-debug447/micstream/master/changelog.md",

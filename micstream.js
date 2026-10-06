@@ -1,9 +1,9 @@
 /**
-* @description MeshCentral Microphone Stream Plugin
+* @description MeshCentral Audio Stream Plugin
 * @author MeshCentral Plugin Developer
-* @copyright 
+* @copyright
 * @license Apache-2.0
-* @version v0.1.0
+* @version v0.3.0
 */
 
 "use strict";
@@ -15,6 +15,7 @@ module.exports.micstream = function (parent) {
     obj.debug = obj.meshServer.debug;
     obj.activeStreams = {}; // Track active audio streams by node ID
     obj.audioBuffers = {}; // Buffer for chunked audio data by node ID
+    obj.isSystemAudio = false; // Track if capturing system audio or microphone
     
     obj.exports = [
         'onWebUIStartupEnd',
@@ -344,10 +345,16 @@ module.exports.micstream = function (parent) {
 
         let spage = `<div id="micStreamPanel" style="height:100%;">
             <div><div class="backButton" tabindex=0 onclick="go(2);" title="Back" onkeypress="if (event.key == 'Enter') go(2);"><div class="backButtonEx"></div></div></div>
-            <h1>Device Actions - <span>Microphone Stream</span></h1>
+            <h1>Device Actions - <span>Audio Stream</span></h1>
             <div class="p10html3" style="padding: 20px;">
                 <div id="micStreamControls">
-                    <h3>Microphone Selection</h3>
+                    <h3>Audio Source Type</h3>
+                    <select id="audioTypeSelect" onchange="pluginHandler.micstream.onAudioTypeChange();" style="width: 100%; max-width: 400px; padding: 8px; margin-bottom: 15px;">
+                        <option value="microphone">🎤 Microphone</option>
+                        <option value="system">🔊 System Audio (Loopback)</option>
+                    </select>
+
+                    <h3 id="micLabel">Microphone Selection</h3>
                     <select id="micSelect" style="width: 100%; max-width: 400px; padding: 8px; margin-bottom: 15px;">
                         <option value="">Loading microphones...</option>
                     </select>
@@ -463,7 +470,7 @@ module.exports.micstream = function (parent) {
     obj.handleMicListResponse = function(mics) {
         var select = Q('micSelect');
         if (!select) return;
-        
+
         select.innerHTML = '';
         if (mics && mics.length > 0) {
             mics.forEach(function(mic, index) {
@@ -477,6 +484,25 @@ module.exports.micstream = function (parent) {
             option.value = '';
             option.text = 'No microphones found';
             select.appendChild(option);
+        }
+    };
+
+    // Handle audio type change (microphone vs system audio)
+    obj.onAudioTypeChange = function() {
+        var audioType = Q('audioTypeSelect').value;
+        var micSelect = Q('micSelect');
+        var micLabel = Q('micLabel');
+
+        if (audioType === 'system') {
+            // Hide microphone selection for system audio
+            micSelect.style.display = 'none';
+            micLabel.style.display = 'none';
+            obj.isSystemAudio = true;
+        } else {
+            // Show microphone selection
+            micSelect.style.display = 'block';
+            micLabel.style.display = 'block';
+            obj.isSystemAudio = false;
         }
     };
     
@@ -507,17 +533,18 @@ module.exports.micstream = function (parent) {
             return;
         }
 
+        var audioType = Q('audioTypeSelect').value;
         var micId = Q('micSelect').value;
         var bitrate = parseInt(Q('bitrateSelect').value);
 
-        if (!micId) {
+        if (audioType === 'microphone' && !micId) {
             alert('Please select a microphone');
             return;
         }
 
         // Use the stored target node ID (handles viewmode correctly)
         var targetNodeId = obj.micstream_targetNodeId || currentNode._id;
-        console.log('MicStream: Starting stream for node: ' + targetNodeId);
+        console.log('MicStream: Starting ' + audioType + ' stream for node: ' + targetNodeId);
 
         // Set current node for audio routing
         if (obj.meshServer.webserver && obj.meshServer.webserver.wssessions) {
@@ -552,7 +579,8 @@ module.exports.micstream = function (parent) {
             pluginaction: 'startStream',
             nodeid: targetNodeId,
             micId: micId,
-            bitrate: bitrate
+            bitrate: bitrate,
+            type: audioType
         }, function(response) {
             if (response && response.success) {
                 // Update UI

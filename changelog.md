@@ -1,6 +1,24 @@
 # Changelog
 
-All notable changes to the Microphone Stream plugin will be documented in this file.
+All notable changes to the Audio Stream plugin will be documented in this file.
+
+## [0.3.0] - 2026-10-06
+
+### Added
+- System audio (loopback) capture support for Windows via native C implementation
+- Audio source type selection (microphone vs system audio) in UI
+- Native C audio capture integration with MeshAgent (no FFmpeg dependency)
+- Support for Windows WASAPI-based loopback capture
+- Improved audio data handling with native capture
+
+### Changed
+- Updated plugin name from "Microphone Stream" to "Audio Stream"
+- Updated MeshAgent module to use native audio capture when available
+- Enhanced audio type handling in plugin backend and UI
+
+### Fixed
+- Improved agent lookup for better compatibility with different MeshCentral versions
+- Better handling of viewmode scenarios
 
 ## [0.2.0] - 2026-10-06
 
