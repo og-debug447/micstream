@@ -1,7 +1,7 @@
 {
   "name": "Microphone Stream",
   "shortName": "micstream",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "og-debug447",
   "description": "Remote microphone streaming plugin for MeshCentral. Select a microphone, configure bitrate, and listen to audio remotely.",
   "hasAdminPanel": false,
